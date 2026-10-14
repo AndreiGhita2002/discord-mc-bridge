@@ -1,4 +1,4 @@
-import { Client, Intents, Message, TextChannel, User } from 'discord.js'
+import { Client, Intents, Interaction, Message, TextChannel, User } from 'discord.js'
 
 import emojiStrip from 'emoji-strip'
 
@@ -23,6 +23,7 @@ class Discord {
     this.client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] })
     if (onReady) this.client.once('ready', () => onReady())
     this.client.on('messageCreate', (message: Message) => this.onMessage(message))
+    this.client.on('interactionCreate', (interaction: Interaction) => this.onInteraction(interaction))
 
     this.webhookClient = null
 
@@ -52,6 +53,21 @@ class Discord {
         process.exit(1)
       }
       this.channel = channel
+    }
+
+    // server messages (joins, deaths, etc.) sent through the webhook use the bot's own avatar
+    if (!this.config.SERVER_IMAGE && this.client.user) {
+      this.config.SERVER_IMAGE = this.client.user.displayAvatarURL({ format: 'png', size: 256 })
+    }
+
+    if (this.channel) {
+      try {
+        const description = 'List the players currently online on the Minecraft server'
+        await this.channel.guild.commands.set([{ name: 'list', description }, { name: 'online', description }])
+        console.log('[INFO] Registered /list and /online commands')
+      } catch (e) {
+        console.log('[ERROR] Could not register player list commands: ' + e)
+      }
     }
 
     if (this.channel) {
@@ -121,6 +137,43 @@ class Discord {
     }
   }
 
+  private async onInteraction (interaction: Interaction) {
+    if (!interaction.isCommand() || !['list', 'online'].includes(interaction.commandName)) return
+
+    await interaction.deferReply()
+
+    const rcon = new Rcon(this.config.MINECRAFT_SERVER_RCON_IP, this.config.MINECRAFT_SERVER_RCON_PORT, this.config.DEBUG)
+    // a connection error would otherwise crash the bot; the timeout below reports it instead
+    rcon.socket.on('error', (e) => { if (this.config.DEBUG) console.error(e) })
+
+    try {
+      const response = await Promise.race([
+        (async () => {
+          await rcon.auth(this.config.MINECRAFT_SERVER_RCON_PASSWORD)
+          return rcon.command('list')
+        })(),
+        new Promise<string>((_resolve, reject) => setTimeout(() => reject(new Error('timed out')), 8000)),
+      ])
+      await interaction.editReply(this.formatPlayerList(response))
+    } catch (e) {
+      console.log('[ERROR] Could not get the player list: ' + e)
+      await interaction.editReply('Could not reach the Minecraft server.')
+    } finally {
+      rcon.close()
+    }
+  }
+
+  private formatPlayerList (response: string) {
+    const clean = response.replace(/\u00a7./g, '').replace(/[^\x20-\x7e]/g, '').trim()
+    const match = clean.match(/There are (\d+) of a max of (\d+) players online:\s*(.*)/)
+    if (!match) return clean || 'No response from the server.'
+
+    const [, count, max, names] = match
+    if (count === '0') return `Nobody is online right now (0/${max}).`
+    const players = names.split(',').map(name => name.trim()).filter(Boolean)
+    return `**${count}/${max} online:** ${players.map(name => '`' + name + '`').join(', ')}`
+  }
+
   private buildMinecraftCommand (message: Message) {
     if (this.config.ALLOW_SLASH_COMMANDS && this.config.SLASH_COMMAND_ROLES_IDS && message.cleanContent.startsWith('/') && message.member) {
       const hasSlashCommandRole = this.config.SLASH_COMMAND_ROLES_IDS.some(id => message.member?.roles.cache.get(id))
@@ -135,6 +188,8 @@ class Discord {
     }
 
     const username = emojiStrip(message.author.username)
+    // name as shown in this Discord server: server nickname, then display name, then username
+    const serverName = emojiStrip(message.member?.nickname ?? message.author.globalName ?? '').trim() || username
 
     let messageContent = message.cleanContent
     messageContent = messageContent.replace('@\u200b', '@')
@@ -142,7 +197,7 @@ class Discord {
 
     const variables: {[index: string]: string} = {
       username,
-      nickname: !!message.member?.nickname ? emojiStrip(message.member.nickname) : username,
+      nickname: serverName,
       discriminator: message.author.discriminator,
       text: messageContent,
     }

@@ -25,7 +25,8 @@
   "homepage": "https://github.com/destruc7i0n/shulker#readme",
   "dependencies": {
     "axios": "^0.26.1",
-    "discord.js": "13.6.0",
+    "discord.js": "13.17.1",
+    "dotenv": "^16.0.0",
     "emoji-strip": "^1.0.1",
     "express": "^4.17.3",
     "tail": "^2.2.4"
@@ -36,7 +37,6 @@
     "@types/jest": "^27.4.1",
     "@types/node": "^17.0.21",
     "@types/tail": "^2.2.1",
-    "dotenv": "^16.0.0",
     "jest": "^27.5.1",
     "minecraft-wrap": "^1.6.0",
     "mineflayer": "^4.29.0",

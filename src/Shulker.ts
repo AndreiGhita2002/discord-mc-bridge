@@ -18,6 +18,8 @@ class Shulker {
     'DEATH_KEY_WORDS': '`DEATH_KEY_WORDS` has been replaced with `REGEX_DEATH_MESSAGE`. Please update this from the latest example config.'
   }
 
+  readonly secretConfigs = ['DISCORD_TOKEN', 'WEBHOOK_URL', 'MINECRAFT_SERVER_RCON_PASSWORD']
+
   readonly removedConfigs: OutdatedConfigMessages = {
     'DISCORD_CHANNEL_NAME': 'Please remove this config line. Use the channel ID with `DISCORD_CHANNEL_ID` rather than the channel name.',
     'SLASH_COMMAND_ROLES': 'Please use the slash command role IDs with `SLASH_COMMAND_ROLES_IDS` instead.'
@@ -36,6 +38,12 @@ class Shulker {
     } catch (e) {
       console.log('[ERROR] Could not load config file!')
       return false
+    }
+
+    // secrets live in the environment (.env) rather than in the config file
+    for (const configKey of this.secretConfigs) {
+      const value = process.env[configKey]
+      if (value) (this.config as any)[configKey] = value
     }
 
     for (const configKey of Object.keys(this.deprecatedConfigs)) {

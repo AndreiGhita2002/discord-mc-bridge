@@ -13,7 +13,8 @@
     "downlevelIteration": true,
     "outDir": "build/",
     "moduleResolution": "node",
-    "baseUrl": "."
+    "baseUrl": ".",
+    "skipLibCheck": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "tests"]
