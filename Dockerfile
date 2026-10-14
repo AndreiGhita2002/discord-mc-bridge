@@ -1,10 +1,16 @@
-FROM node:18-alpine
+FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json tsconfig.json ./
-RUN npm install
+COPY package.json yarn.lock tsconfig.json ./
+RUN yarn install --frozen-lockfile
 COPY typings ./typings
 COPY src ./src
-RUN npm run build
-COPY config.json /app/config.json
-# secrets are not baked in: pass them at runtime with `docker run --env-file .env`
-CMD ["npm", "run", "start"]
+RUN yarn build
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production && yarn cache clean
+COPY --from=build /app/build ./build
+# config.json is mounted at /app/config.json and secrets come from the environment (env_file)
+CMD ["node", "build/index.js"]
